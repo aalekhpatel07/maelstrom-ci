@@ -22,8 +22,7 @@ maelstrom:
     https://github.com/jepsen-io/maelstrom/releases/download/${version}/maelstrom.tar.bz2
 
   RUN tar -xvjf maelstrom.tar.bz2
-  ENTRYPOINT ["/app/maelstrom/maelstrom"]
-  CMD ["--help"]
+  CMD ["/app/maelstrom/maelstrom"]
   SAVE IMAGE maelstrom:latest
 
 rust-base:
@@ -54,4 +53,12 @@ ci:
 rust-ci:
   FROM +maelstrom
   COPY +rust-app/release /usr/local/bin
+  ARG EARTHLY_GIT_SHORT_HASH
+  ARG maelstrom_args
+  RUN maelstrom/maelstrom ${maelstrom_args} || true
+  EXPOSE 80
+  SAVE ARTIFACT store/latest AS LOCAL runs/$EARTHLY_GIT_SHORT_HASH
+  CMD ["maelstrom/maelstrom", "serve", "--port", "80", "--host", "0.0.0.0"]
+  SAVE IMAGE maelstrom-with-rust-app:$EARTHLY_GIT_SHORT_HASH
   SAVE IMAGE maelstrom-with-rust-app:latest
+
