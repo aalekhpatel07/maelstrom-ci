@@ -1,0 +1,25 @@
+name: Maelstrom build and test with Earthly
+on:
+  workflow_dispatch:
+    inputs:
+      maelstrom_args:
+        description: 'The full maelstrom args to pass to the executable when running the tests.'
+        required: true
+        default: 'test -w echo --bin /usr/local/bin/solutions --node-count 1 --time-limit 10'
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      FORCE_COLOR: 1
+    steps:
+    - uses: earthly/actions-setup@v1
+      with:
+        version: v0.8.0
+    - uses: actions/checkout@v4
+    - name: Docker Login
+      run: docker login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN"
+    - name: Run build
+      run: earthly --ci --push +ci --maelstrom_args='${{ github.event.inputs.maelstrom_args }}'
