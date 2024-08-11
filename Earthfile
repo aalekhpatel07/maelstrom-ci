@@ -48,10 +48,8 @@ rust-app:
   RUN $HOME/.cargo/bin/cargo build --release
   SAVE ARTIFACT target/release
 
-all:
-  BUILD +maelstrom
-  BUILD +rust-base
-  BUILD +rust-app
+ci:
+  BUILD +rust-ci
 
 rust-ci:
   FROM +maelstrom

@@ -1,9 +1,9 @@
 # Maelstrom (Solution Framework w/ CI)
 
-Use [Earthly](https://cloud.earthly.dev) to build all the targets:
+Use [Earthly](https://cloud.earthly.dev) to build the `ci` target:
 
 ```sh
-earthly +all
+earthly +ci
 ```
 
 Then invoke the executable (in `/usr/local/bin/solutions`) under maelstrom's test env:
