@@ -23,7 +23,7 @@ jobs:
     - name: Docker Login
       run: docker login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN"
     - name: Run build
-      run: earthly --ci --push +ci --maelstrom_args='${{ github.event.inputs.maelstrom_args }}' --output
+      run: earthly --ci --push +ci --maelstrom_args='${{ github.event.inputs.maelstrom_args }}' --output=true
     - name: Archive report
       uses: actions/upload-artifact@v4
       with:
