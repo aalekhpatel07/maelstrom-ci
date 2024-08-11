@@ -6,6 +6,7 @@ on:
         description: 'The full maelstrom args to pass to the executable when running the tests.'
         required: true
         default: 'test -w echo --bin /usr/local/bin/solutions --node-count 1 --time-limit 10'
+  push:
   
 jobs:
   build:
