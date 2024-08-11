@@ -5,7 +5,7 @@ on:
       maelstrom_args:
         description: 'The full maelstrom args to pass to the executable when running the tests.'
         required: true
-        default: 'test -w echo --bin /usr/local/bin/solutions --node-count 1 --time-limit 10'
+          # default: 'test -w echo --bin /usr/local/bin/solutions --node-count 1 --time-limit 10'
   push:
   
 jobs:
@@ -24,3 +24,10 @@ jobs:
       run: docker login --username "$DOCKERHUB_USERNAME" --password "$DOCKERHUB_TOKEN"
     - name: Run build
       run: earthly --ci --push +ci --maelstrom_args='${{ github.event.inputs.maelstrom_args }}'
+    - name: Archive report
+      uses: actions/upload-artifact@v4
+      with:
+        name: runs
+        path: |
+          runs
+
