@@ -46,6 +46,10 @@ where Message: Serialize + DeserializeOwned + Debug + Sync + Send + 'static
                 error!(message = ?err, error = ?err, "failed to write to stdout");
                 break;
             }
+            if let Err(err) = stdout.write_all(b"\n") {
+                error!(message = ?err, error = ?err, "failed to write newline to stdout");
+                break;
+            }
             
             if let Err(err) = stdout.flush() {
                 error!(error = ?err, "failed to flush to stdout");

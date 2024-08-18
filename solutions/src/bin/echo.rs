@@ -1,32 +1,55 @@
 use serde::{Serialize, Deserialize};
-use solutions::message::Message;
+use solutions::message::{Envelope, Body};
 use solutions::io::io_channel;
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Body {
+#[non_exhaustive]
+pub enum Payload {
+    Init { 
+        node_id: String,
+        node_ids: Vec<String>,
+    },
+    InitOk,
     Echo {
-        msg_id: usize,
         echo: String,
     },
     EchoOk {
-        msg_id: usize,
-        in_reply_to: usize,
         echo: String
     }
 }
 
+fn message_id() -> usize {
+    MSG_ID.fetch_add(1, Ordering::SeqCst)
+}
 
 pub async fn server() {
-    let (writer, mut reader, _) = io_channel::<Message<Body>>();
-    while let Some(message) = reader.recv().await {
-        if let Body::Echo { msg_id, echo } = &message.body {
-            writer.send(message.reply_with(
-                Body::EchoOk { msg_id: MSG_ID.fetch_add(1, Ordering::SeqCst), in_reply_to: *msg_id, echo: echo.clone() }
-            )).unwrap();
+    let (writer, mut reader, _) = io_channel::<Envelope<Payload>>();
+    while let Some(envelope) = reader.recv().await {
+        debug!(payload = ?envelope.body.message, "payload");
+        match &envelope.body.message {
+            Payload::Echo { echo } => {
+                let reply = envelope.reply_with(
+                    Some(message_id()),
+                    Payload::EchoOk { echo: echo.clone() }
+                );
+                writer.send(reply).unwrap();
+            },
+            Payload::Init { .. } => {
+                let reply = envelope.reply_with(
+                    Some(message_id()),
+                    Payload::InitOk
+                );
+                writer.send(reply).unwrap();
+            },
+            _ => {
+                break;
+            }
         }
     }
 }
@@ -34,6 +57,12 @@ pub async fn server() {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::FmtSubscriber::builder()
+    .with_writer(std::io::stderr)
+    .pretty()
+    .with_ansi(false)
+    .with_env_filter(EnvFilter::from_default_env())
+    .init();
+
     server().await;
 }
