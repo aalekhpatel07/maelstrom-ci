@@ -1,7 +1,6 @@
 use serde::{Serialize, Deserialize};
-use solutions::message::{Envelope, Body};
-use solutions::io::io_channel;
-use tracing::debug;
+use solutions::{message::Envelope, io::io_channel};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing_subscriber::EnvFilter;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -28,29 +27,32 @@ fn message_id() -> usize {
     MSG_ID.fetch_add(1, Ordering::SeqCst)
 }
 
+
+#[tracing::instrument(skip(writer))]
+pub async fn handle_envelope(envelope: Envelope<Payload>, writer: UnboundedSender<Envelope<Payload>>) {
+    match &envelope.body.message {
+        Payload::Echo { echo } => {
+            let reply = envelope.reply_with(
+                Some(message_id()),
+                Payload::EchoOk { echo: echo.clone() }
+            );
+            writer.send(reply).unwrap();
+        },
+        Payload::Init { .. } => {
+            let reply = envelope.reply_with(
+                Some(message_id()),
+                Payload::InitOk
+            );
+            writer.send(reply).unwrap();
+        },
+        _ => {}
+    }
+}
+
 pub async fn server() {
     let (writer, mut reader, _) = io_channel::<Envelope<Payload>>();
     while let Some(envelope) = reader.recv().await {
-        debug!(payload = ?envelope.body.message, "payload");
-        match &envelope.body.message {
-            Payload::Echo { echo } => {
-                let reply = envelope.reply_with(
-                    Some(message_id()),
-                    Payload::EchoOk { echo: echo.clone() }
-                );
-                writer.send(reply).unwrap();
-            },
-            Payload::Init { .. } => {
-                let reply = envelope.reply_with(
-                    Some(message_id()),
-                    Payload::InitOk
-                );
-                writer.send(reply).unwrap();
-            },
-            _ => {
-                break;
-            }
-        }
+        handle_envelope(envelope, writer.clone()).await;
     }
 }
 
@@ -59,7 +61,7 @@ pub async fn server() {
 async fn main() {
     tracing_subscriber::FmtSubscriber::builder()
     .with_writer(std::io::stderr)
-    .pretty()
+    // .pretty()
     .with_ansi(false)
     .with_env_filter(EnvFilter::from_default_env())
     .init();
