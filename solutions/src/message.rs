@@ -45,4 +45,7 @@ impl<M> Envelope<M> {
             }
         }
     }
+    pub fn msg_id(&self) -> Option<usize> {
+        self.body.msg_id
+    }
 }
