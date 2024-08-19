@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use solutions::{io::io_channel, message::{Body, Envelope}};
 use tokio::sync::mpsc::UnboundedSender;
+use tracing::debug;
 use tracing_subscriber::EnvFilter;
 use std::{collections::HashMap, sync::atomic::{AtomicUsize, Ordering}, time::Duration};
 use std::sync::{Arc, Mutex};
@@ -31,7 +32,8 @@ pub enum Payload {
     TopologyOk,
     Gossip {
         messages: Vec<usize>,
-    }
+    },
+    GossipOk,
 }
 
 fn message_id() -> usize {
@@ -43,7 +45,8 @@ pub struct State {
     my_id: String,
     topology: HashMap<String, Vec<String>>,
     seen_messages: Vec<usize>,
-    buffered_messages: Vec<usize>,
+    // messages remaining to gossip, by neighbor.
+    buffered_messages: HashMap<String, Vec<usize>>,
 }
 
 
@@ -75,6 +78,15 @@ pub async fn handle_envelope(
         Payload::Topology { topology } => {
             let mut state = state.lock().unwrap();
             state.topology = topology.clone();
+            
+            let neighbors = state.neighbors().cloned().collect::<Vec<_>>();
+            for neighbor in neighbors {
+                state
+                .buffered_messages
+                .entry(neighbor)
+                .or_default();
+            }
+
             let reply = envelope.reply_with(
                 Some(message_id()),
                 Payload::TopologyOk
@@ -84,7 +96,15 @@ pub async fn handle_envelope(
         Payload::Broadcast { message } => {
             let mut state = state.lock().unwrap();
             state.seen_messages.push(*message);
-            state.buffered_messages.push(*message);
+
+            let neighbors = state.neighbors().cloned().collect::<Vec<_>>();
+            for neighbor in neighbors {
+                state
+                .buffered_messages
+                .entry(neighbor.to_owned())
+                .and_modify(|messages| messages.push(*message));
+            }
+
             let reply = envelope.reply_with(
                 Some(message_id()),
                 Payload::BroadcastOk
@@ -102,12 +122,21 @@ pub async fn handle_envelope(
         Payload::Gossip { messages } => {
             let mut state = state.lock().unwrap();
             state.seen_messages.extend(messages);
-            // let reply = envelope.reply_with(
-            //     Some(message_id()),
-            //     Payload::ReadOk { messages: state.seen_messages.clone() }
-            // );
-            // writer.send(reply).unwrap();
+
+            let reply = envelope.reply_with(
+                Some(message_id()),
+                Payload::GossipOk
+            );
+            writer.send(reply).unwrap();
         },
+        Payload::GossipOk => {
+            // clear the buffered messages for this neighbor
+            // once we get an ack.
+            let node = envelope.source.clone();
+            let mut state = state.lock().unwrap();
+            state.buffered_messages.get_mut(&node).unwrap().clear();
+            debug!(node = node, "cleared buffered messages for node");
+        }
 
         _ => {}
     }
@@ -119,20 +148,20 @@ pub async fn gossip_every_so_often(
     state: Arc<Mutex<State>>, 
     writer: UnboundedSender<Envelope<Payload>>
 ) {
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let mut interval = tokio::time::interval(Duration::from_millis(1000));
     interval.tick().await;
 
     loop {
         interval.tick().await;
         {
-            let mut state = state.lock().unwrap();
-            let payload = Payload::Gossip { messages: state.buffered_messages.clone() };
-            let body = Body { msg_id: Some(message_id()), in_reply_to: None, message: payload };
+            let state = state.lock().unwrap();
             for neighbor in state.neighbors() {
+                let buffered_messages = state.buffered_messages.get(neighbor).unwrap();
+                let payload = Payload::Gossip { messages: buffered_messages.clone() };
+                let body = Body { msg_id: Some(message_id()), in_reply_to: None, message: payload };
                 let envelope = Envelope::new(&state.my_id, neighbor, body.clone());
                 writer.send(envelope).unwrap();
             }
-            state.buffered_messages.clear();
         }    
     }
 }
