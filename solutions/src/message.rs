@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<M> {
     #[serde(rename = "src")]
     pub source: String,
@@ -47,5 +47,13 @@ impl<M> Envelope<M> {
     }
     pub fn msg_id(&self) -> Option<usize> {
         self.body.msg_id
+    }
+
+    pub fn with_message<T>(&self, message: T) -> Envelope<T> {
+        Envelope::<T>::new(
+            &self.source,
+            &self.destination,
+            Body { msg_id: self.body.msg_id, in_reply_to: self.body.in_reply_to, message }
+        )
     }
 }
